@@ -331,3 +331,46 @@ def test_healing_fix_returns_false_on_subprocess_error(tmp_path):
         )
 
     assert result is False
+
+
+def test_fetch_rag_context_returns_empty_when_rag_not_found(tmp_path):
+    from src.generator import fetch_rag_context_for_error
+    with mock.patch("src.generator.shutil.which", return_value=None):
+        ctx = fetch_rag_context_for_error("ZeroDivisionError: division by zero", tmp_path)
+    assert ctx == ""
+
+
+def test_fetch_rag_context_success(tmp_path):
+    from src.generator import fetch_rag_context_for_error
+    mock_out = (
+        "Considere as seguintes referências técnicas locais:\n"
+        "--- [Fonte: math.py] ---\ndef add(a, b):\n\n"
+        "--- TAREFA SOLICITADA ---\n"
+    )
+    mock_res = mock.Mock(returncode=0, stdout=mock_out)
+    with mock.patch("src.generator.shutil.which", return_value="/bin/rag"), \
+         mock.patch("src.generator.subprocess.run", return_value=mock_res):
+        ctx = fetch_rag_context_for_error("AssertionError: 1 != 2", tmp_path)
+
+    assert "--- [Fonte: math.py] ---" in ctx
+
+
+def test_healing_fix_injects_rag_block_when_rag_returns_context(tmp_path):
+    source_file, test_file, repo = _make_repo(tmp_path)
+
+    with mock.patch(
+        "src.generator.fetch_rag_context_for_error",
+        return_value="--- [Fonte: math.py] ---",
+    ), mock.patch(
+        "src.generator.subprocess.run", return_value=mock.Mock(),
+    ) as run_mock:
+        request_healing_fix(
+            source_file, test_file, repo,
+            traceback_snippet="NameError: name 'foo' is not defined",
+            iteration=1,
+            max_iterations=3,
+        )
+
+    prompt = run_mock.call_args.args[0][-1]
+    assert "--- CONTEXTO DO PROJETO (recuperado via Archimedes RAG) ---" in prompt
+    assert "--- [Fonte: math.py] ---" in prompt

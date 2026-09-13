@@ -71,6 +71,37 @@ def generate_tests_for_file(
         return False
 
 
+def fetch_rag_context_for_error(traceback_snippet: str, repo_root: Path) -> str:
+    """
+    Consulta o Archimedes RAG de forma não-bloqueante para enriquecer a auto-cura
+    com definições técnicas correlatas existentes no repositório.
+    """
+    rag_bin = shutil.which("rag") or shutil.which("opencode-rag")
+    if not rag_bin:
+        return ""
+    try:
+        # Extrai termos relevantes do erro (exceção ou asserção)
+        error_lines = [
+            line.strip()
+            for line in traceback_snippet.splitlines()
+            if any(term in line for term in ("Error:", "assert", "FAILED", "Exception:"))
+        ]
+        query = error_lines[0] if error_lines else traceback_snippet[:150].strip()
+        if not query:
+            return ""
+
+        cmd = [rag_bin, "run", "--dry-run", f"Contexto e definições para resolver: {query}"]
+        res = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True, timeout=5)
+        if res.returncode == 0 and "--- [Fonte:" in res.stdout:
+            start = res.stdout.find("Considere as seguintes referências técnicas locais")
+            end = res.stdout.find("--- TAREFA SOLICITADA ---")
+            if start != -1 and end != -1:
+                return res.stdout[start:end].strip()
+    except Exception:
+        pass
+    return ""
+
+
 def request_healing_fix(
     source_file: Path,
     test_file: Path,
@@ -81,18 +112,22 @@ def request_healing_fix(
     model: Optional[str] = None,
 ) -> bool:
     """
-    Envia o traceback da falha para o OpenCode CLI diagnosticar e aplicar a auto-correção.
+    Envia o traceback da falha para o OpenCode CLI diagnosticar e aplicar a auto-correção,
+    enriquecido com contexto semântico via Archimedes RAG.
     """
     opencode_bin = find_opencode_binary()
     rel_source = source_file.relative_to(repo_root)
     rel_test = test_file.relative_to(repo_root)
+
+    rag_context = fetch_rag_context_for_error(traceback_snippet, repo_root)
+    rag_block = f"\n\n--- CONTEXTO DO PROJETO (recuperado via Archimedes RAG) ---\n{rag_context}\n-----------------------------------------------------------" if rag_context else ""
 
     prompt = (
         f"🚨 DIAGNÓSTICO DE FALHA EM TESTE UNITÁRIO (Ciclo de Auto-Cura {iteration}/{max_iterations})\n\n"
         f"O teste em `{rel_test}` falhou ao testar `{rel_source}`.\n\n"
         f"--- STACK TRACE DA FALHA (pytest) ---\n"
         f"{traceback_snippet}\n"
-        f"---------------------------------------\n\n"
+        f"---------------------------------------{rag_block}\n\n"
         f"INSTRUÇÃO DE CURA:\n"
         f"1. Analise cuidadosamente a causa raiz da falha indicada no traceback acima.\n"
         f"2. Se o teste estiver incorreto (ex.: asserção inválida, mock ausente, tipo incompatível), corrija o arquivo `{rel_test}`.\n"
