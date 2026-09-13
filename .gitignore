@@ -1,0 +1,28 @@
+# Ambientes virtuais
+.venv/
+venv/
+ENV/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Caches locais & logs
+.cache/
+*.log
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Builds & Distribuição
+build/
+dist/
+*.egg-info/

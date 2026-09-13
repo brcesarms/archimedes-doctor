@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Archimedes Doctor - Wrapper de Execução do Gerador de Testes com Self-Healing
+set -euo pipefail
+
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "${REAL_SCRIPT}")/.." && pwd)"
+VENV_PYTHON="${SCRIPT_DIR}/.venv/bin/python"
+CLI_SCRIPT="${SCRIPT_DIR}/src/cli.py"
+
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+    echo "✖ Erro: Ambiente virtual Python não encontrado em ${VENV_PYTHON}" >&2
+    exit 1
+fi
+
+exec "${VENV_PYTHON}" "${CLI_SCRIPT}" "$@"
