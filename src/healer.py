@@ -2,11 +2,17 @@
 Orquestrador do ciclo de vida de Auto-Cura (Self-Healing Loop) do Archimedes Doctor.
 """
 
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 from rich.console import Console
 from rich.panel import Panel
+
+# Garante que o diretório src esteja no sys.path para resolução interna
+_src_dir = str(Path(__file__).parent.resolve())
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
 
 from scanner import (
     locate_or_propose_test_file,
